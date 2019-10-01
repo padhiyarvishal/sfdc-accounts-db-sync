@@ -1,0 +1,182 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:os="http://www.mulesoft.org/schema/mule/os" xmlns:ee="http://www.mulesoft.org/schema/mule/ee/core"
+	xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns:batch="http://www.mulesoft.org/schema/mule/batch" xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns="http://www.mulesoft.org/schema/mule/core" xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/batch http://www.mulesoft.org/schema/mule/batch/current/mule-batch.xsd
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd
+http://www.mulesoft.org/schema/mule/ee/core http://www.mulesoft.org/schema/mule/ee/core/current/mule-ee.xsd
+http://www.mulesoft.org/schema/mule/os http://www.mulesoft.org/schema/mule/os/current/mule-os.xsd">
+	<os:object-store name="Object_store" doc:name="Object store" doc:id="e8419723-a9ac-4ab1-8f3d-9c3fe0b4e77e" />
+	<flow name="insertAllaccounts" doc:id="386d6cdb-c22e-42bb-be04-243d302ebf7c" >
+		<salesforce:query doc:name="Query Sfdc Account table" doc:id="5251ac25-d883-47da-bdc0-f6de5f85b282" config-ref="Salesforce_Config" >
+			<salesforce:salesforce-query >SELECT Id,Name, AccountNumber,Site,type,BillingStreet, BillingCity,BillingCountry,BillingPostalCode,
+               BillingState,Phone,ShippingStreet,ShippingCity,ShippingCountry,ShippingState,shippingpostalcode
+      from account</salesforce:salesforce-query>
+		</salesforce:query>
+		<ee:transform doc:name="Transform Message" doc:id="16bdcd34-f8db-4f0c-bd17-028948aa2521" >
+			<ee:message >
+				<ee:set-payload ><![CDATA[%dw 2.0
+output application/java
+---
+payload map{
+	accountId: ($.Id default ""),
+	accountName: $.Name,
+	accountNumber: $.AccountNumber,
+	ShippingStreet: $.ShippingStreet,
+	accountSite : $.Site,
+	shippingPostalCode: $.ShippingPostalCode,
+	accountType : $.Type,
+	BillingCity: $.BillingCity,
+	BillingCountry: $.BillingCountry,
+	BillingStreet: $.BillingStreet,
+	Phone: $.Phone,
+	ShippingCountry: $.ShippingCountry,
+	BillingPostalCode: $.BillingPostalCode,
+	ShippingCity: $.ShippingCity,
+	ShippingState: $.ShippingState,
+	BillingState: $.BillingState,
+}]]></ee:set-payload>
+			</ee:message>
+		</ee:transform>
+		<db:bulk-insert doc:name="Bulk insert" doc:id="cfa9e3a4-1208-4463-9e6f-327758232b9b" config-ref="Database_Config">
+			<db:sql >insert into account ( AccountId, 
+                                  Name, 
+                                  AccountNumber,
+                                  Site,type,
+                                  BillingStreet, BillingCity,BillingCountry,BillingPostalCode, 
+                       BillingState,Phone,ShippingStreet,ShippingCity,ShippingCountry,ShippingState,ShippingPostalCode)
+                       values (:accountId,:accountName,:accountNumber
+,:accountSite
+,:accountType
+,:BillingStreet
+,:BillingCity
+,:BillingCountry
+,:BillingPostalCode
+,:BillingState
+,:Phone
+,:ShippingStreet
+,:ShippingCity
+,:ShippingCountry
+,:ShippingState
+,:shippingPostalCode)</db:sql>
+		</db:bulk-insert>
+	</flow>
+	<flow name="synchronizationFlow" doc:id="636dab86-8806-458b-9644-a859781859f0" >
+		<logger level="INFO" doc:name="Start Message" doc:id="3a71bc6e-cc2e-492d-8af2-fbe6c0aa94b6" message="-- Salesforce DB Sync Starts --"/>
+		<os:retrieve doc:name="Last Modified TimeStamp" doc:id="456541ce-a72f-4cfa-8ada-4f6e611205f5" key="lastModifiedTimeStamp" objectStore="Object_store" target="lastModifiedTimeStamp">
+			<os:default-value ><![CDATA[#[Mule::p('watermark.default.expression')]]]></os:default-value>
+		</os:retrieve>
+		<logger level="INFO" doc:name="Display LastModified TimeStamp" doc:id="1fa5d117-1ce0-4d5e-bb4e-9818e90b7f3e" message="#[vars.lastModifiedTimeStamp]"/>
+		<logger level="INFO" doc:name="Display BatchSize" doc:id="8603220a-a3d7-4e5f-995b-a4dd8814a374" message="#[Mule::p('batchSize')]"/>
+		<salesforce:query doc:name="SFDC Query Account Data" doc:id="8fe6938e-48c5-4b96-aa55-e215ac0c1534" config-ref="Salesforce_Config">
+			<salesforce:salesforce-query>SELECT Id,Name, AccountNumber,Site,type,BillingStreet, BillingCity,BillingCountry,BillingPostalCode,
+               BillingState,Phone,ShippingStreet,ShippingCity,ShippingCountry,ShippingState,shippingpostalcode,LastModifiedDate 
+     from account
+     where LastModifiedDate  &gt; :lastModifiedTimeStamp
+      order by LastModifiedDate  LIMIT :limit</salesforce:salesforce-query>
+			<salesforce:parameters><![CDATA[#[output application/java
+---
+{
+	lastModifiedTimeStamp : vars.lastModifiedTimeStamp,
+	limit : Mule::p('batchSize')
+}]]]></salesforce:parameters>
+		</salesforce:query>
+		<logger level="INFO" doc:name="Display LastModified TimeStamp Post SFDC Query" doc:id="1a62b581-a31e-411e-a8f9-da8b2e50984a" message="#[vars.lastModifiedTimeStamp]"/>
+		<set-variable value="#[max(payload map $.LastModifiedDate)]" doc:name="Max Last Modified Date" doc:id="02b6fd28-51a3-4531-901a-7c762dfc528c" variableName="SfdcPayload"/>
+		<logger level="INFO" doc:name="Logger" doc:id="b6321368-a379-4677-a6ea-311d91c75b3d" message="#[payload]"/>
+		<choice doc:name="Choice" doc:id="36bdd84d-e382-4a06-8b3f-8f5db6485351" >
+			<when expression="#[sizeOf(payload)!=0]">
+				<flow-ref doc:name="Sync MySql DB Flow Reference" doc:id="f3006498-7ad4-405f-aee4-4eeaaee0d036" name="synchornizeMySqlDb"/>
+				<logger level="INFO" doc:name="Display End of Batch processing" doc:id="567d8f5e-4c63-480c-847c-b6ca95897e4c" message="Batch Processing Complete"/>
+			</when>
+			<otherwise >
+				<logger level="INFO" doc:name="Records in Sync - Payload is Null" doc:id="997562a5-5698-4f91-8f9d-4f3ceb6896e6" message="Payload from SalesForce Query is Null. Records are in Sync"/>
+			</otherwise>
+		</choice>
+		<os:store doc:name="Post Sync Store Last Modified Date" doc:id="0bad692d-a6d9-4710-8245-1de5112693a6" key="lastModifiedTimeStamp" objectStore="Object_store" failOnNullValue="false">
+					<os:value><![CDATA[#[//max(payload map $.LastModifiedDate)
+vars.SfdcPayload]]]></os:value>
+				</os:store>
+		<logger level="INFO" doc:name="Display Stored LastModified Date" doc:id="bb8bcadd-351f-48dd-b3f3-105556cbc66d" message="#[vars.lastModifiedTimeStamp]"/>
+	</flow>
+	<flow name="synchornizeMySqlDb" doc:id="579bd11c-b7d0-4492-86c9-e85322217b45" >
+		<batch:job jobName="implementationBatch_Job" doc:id="fc637d0d-127e-44a8-949f-eb0e2a7a65ec" blockSize="${batch.blockSize}" maxFailedRecords="${batch.max.failrecords}">
+			<batch:process-records >
+				<batch:step name="getMySqlAccounts_Batch_Step" doc:id="1911a67c-518d-4484-a953-fb135e70d46c" >
+					<db:select doc:name="getAccountsInfo" doc:id="456257d7-63de-4d29-990c-5e83788a895e" config-ref="Database_Config" target="exists" targetValue="#[(sizeOf(payload as Array) &gt; 0)]">
+						<db:sql >select AccountId,Name,Lastmodifieddate
+from account where Accountid = :Id
+ and name = :name</db:sql>
+						<db:input-parameters ><![CDATA[#[{'name' : payload.Name,
+ 'Id' : payload.Id
+}]]]></db:input-parameters>
+					</db:select>
+				</batch:step>
+				<batch:step name="InsertRecordsintoMySqlSync" doc:id="ed99feb6-1e71-4e74-bd5b-1133f64db587" acceptExpression="#[not vars.exists]">
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="04d50b44-547f-45b8-8f68-281e5e7d1e7d" size="${batch.aggregation.packetsize}">
+						<db:bulk-insert doc:name="Bulk insert into MySql Account Table" doc:id="d4f1c3fd-698a-4e3d-a7e4-61e4e316d682" config-ref="Database_Config">
+							<db:bulk-input-parameters ><![CDATA[#[output application/java
+---
+payload]]]></db:bulk-input-parameters>
+							<db:sql >insert into account ( AccountId, 
+                                  Name, 
+                                  AccountNumber,
+                                  Site,type,
+                                  BillingStreet, BillingCity,BillingCountry,BillingPostalCode, 
+                       BillingState,Phone,ShippingStreet,ShippingCity,ShippingCountry,ShippingState,ShippingPostalCode)
+                       values (:Id,:Name,:AccountNumber
+,:Site
+,:Type
+,:BillingStreet
+,:BillingCity
+,:BillingCountry
+,:BillingPostalCode
+,:BillingState
+,:Phone
+,:ShippingStreet
+,:ShippingCity
+,:ShippingCountry
+,:ShippingState
+,:ShippingPostalCode)</db:sql>
+						</db:bulk-insert>
+						<logger level="INFO" doc:name="Logger" doc:id="5a6e683a-3754-4154-9a46-ba7ae312e8c3" message="Processing Inserts Complete"/>
+					</batch:aggregator>
+					<logger level="INFO" doc:name="Logger" doc:id="ad35a9a0-caba-46e4-b4dd-2e34ea78eef4" />
+				</batch:step>
+				<batch:step name="UpdateMySqlSync" doc:id="4aed11f0-be3b-4c58-82c2-6167a0907acc" acceptExpression="#[vars.exists]">
+					<batch:aggregator doc:name="Batch Aggregator" doc:id="b85ee12e-83eb-440e-85e8-58c00c597992" size="${batch.aggregation.packetsize}" >
+						<flow-ref doc:name="Flow Reference" doc:id="7efe6ceb-9389-47d4-a5f3-93d1c0e052bc" name="updateDbSyncImplFlow"/>
+					</batch:aggregator>
+					<logger level="INFO" doc:name="Logger" doc:id="1255e809-da6a-405a-824c-32d1c767657b" message="In the Update Sync Process"/>
+				</batch:step>
+				<batch:step name="FailureStep" doc:id="f2e44395-8ad8-4d0d-b3e9-1a4647b8c1d6" acceptPolicy="ONLY_FAILURES">
+					<logger level="INFO" doc:name="Display Failed Records" doc:id="37651acb-a2b4-4296-b7f6-aa9875f635d2" message="*** HANDLE FAILURES *** There was a failure processing this record: #[message.payload] "/>
+				</batch:step>
+			</batch:process-records>
+			<batch:on-complete >
+				<logger level="INFO" doc:name="Logger" doc:id="0281e941-59e6-475d-8bd2-5a15a0f55e37" message="Total Records Processed : #[payload.processedRecords]"/>
+			</batch:on-complete>
+		</batch:job>
+	</flow>
+	<flow name="updateDbSyncImplFlow" doc:id="f8a4e110-b1fa-46a1-b46b-0068a2f1254d" >
+		<db:bulk-update doc:name="Bulk update MySql Account Table columns" doc:id="a6fc1d8b-3c05-456e-8958-e79ed3cc6fcd" config-ref="Database_Config">
+			<db:sql >update account
+ set BillingStreet = :BillingStreet,
+       BillingCity = :BillingCity,
+       BillingCountry = :BillingCountry,
+       BillingPostalCode = :BillingPostalCode,
+      BillingState = :BillingState,
+      Phone= :Phone,
+      ShippingStreet=:ShippingStreet,
+      ShippingCity= :ShippingCity,
+      ShippingCountry= :ShippingCountry,
+      ShippingState= :ShippingState,
+      ShippingPostalCode=:ShippingPostalCode
+   where AccountId = :Id
+    and Name = :Name</db:sql>
+		</db:bulk-update>
+		<logger level="INFO" doc:name="Copy_of_Logger" doc:id="4063b3fb-4e80-4148-a8a2-ff8b502b5202" message="Processing update complete" />
+	</flow>
+</mule>

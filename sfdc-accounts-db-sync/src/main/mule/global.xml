@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<mule xmlns:secure-properties="http://www.mulesoft.org/schema/mule/secure-properties"
+	xmlns:salesforce="http://www.mulesoft.org/schema/mule/salesforce" xmlns:db="http://www.mulesoft.org/schema/mule/db"
+	xmlns="http://www.mulesoft.org/schema/mule/core"
+	xmlns:doc="http://www.mulesoft.org/schema/mule/documentation" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="
+http://www.mulesoft.org/schema/mule/db http://www.mulesoft.org/schema/mule/db/current/mule-db.xsd http://www.mulesoft.org/schema/mule/core http://www.mulesoft.org/schema/mule/core/current/mule.xsd
+http://www.mulesoft.org/schema/mule/salesforce http://www.mulesoft.org/schema/mule/salesforce/current/mule-salesforce.xsd
+http://www.mulesoft.org/schema/mule/secure-properties http://www.mulesoft.org/schema/mule/secure-properties/current/mule-secure-properties.xsd">
+	<db:config name="Database_Config" doc:name="Database Config" doc:id="3508af15-c370-41c4-93c5-8b7cf4e09d6a" >
+		<db:my-sql-connection host="${secure::db.host}" port="${secure::db.port}" user="${secure::db.user}" password="${secure::db.password}" database="${secure::db.databaseName}" />
+	</db:config>
+	<salesforce:sfdc-config name="Salesforce_Config" doc:name="Salesforce Config" doc:id="49482213-c519-4d94-a635-e7b044df57b5" >
+		<salesforce:cached-basic-connection username="${secure::sfdc.username}" password="${secure::sfdc.password}" securityToken="${secure::sfdc.securityToken}" />
+	</salesforce:sfdc-config>
+	<configuration-properties doc:name="Configuration properties" doc:id="db6f3906-3663-495c-a1ce-5a8d498a3141" file="local.properties" />
+	<secure-properties:config name="Secure_Properties_Config" doc:name="Secure Properties Config" doc:id="286f9dcd-e6a7-4a34-8030-0fa355db2645" file="dev-secure.properties" key="MuleSoft909" >
+		<secure-properties:encrypt algorithm="Blowfish" />
+	</secure-properties:config>
+	<import doc:name="Import" doc:id="670e6ddf-fa4e-4207-baf2-95367dee3870" file="error-framework.xml" />
+	<configuration doc:name="Configuration" doc:id="fa35101f-915e-4443-ace2-809b4b7316cd" defaultErrorHandler-ref="globalError_Handler" />
+	<error-handler name="globalError_Handler" doc:id="6c474ab6-a67f-410a-9ff9-3392e06d3fc3" >
+		<on-error-continue enableNotifications="true" logException="true" doc:name="On Error Continue" doc:id="c3096e36-d7b0-4856-bca5-a75afef87df4" type="ANY">
+			<flow-ref doc:name="Flow Reference" doc:id="51193d7d-7823-42a1-93d6-0374ccf9c9e0" name="error-synchronization-api"/>
+		</on-error-continue>
+	</error-handler>
+		
+</mule>
